@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useMatches } from '../../hooks/useMatches.js'
 
 const KNOWN_ARCHETYPES = [
@@ -13,7 +13,12 @@ const KNOWN_ARCHETYPES = [
 const RESULTS = ['2-0', '2-1', '1-2', '0-2']
 
 export default function MatchForm({ onSuccess }) {
-  const { addMatch } = useMatches()
+  const { addMatch, matches } = useMatches()
+
+  const allArchetypes = useMemo(() => {
+    const fromHistory = matches.map(m => m.opponent_archetype).filter(Boolean)
+    return [...new Set([...KNOWN_ARCHETYPES, ...fromHistory])].sort()
+  }, [matches])
   const [form, setForm] = useState({
     opponent_archetype: '',
     result: '',
@@ -56,7 +61,7 @@ export default function MatchForm({ onSuccess }) {
           className="w-full bg-mtg-bg border border-mtg-border rounded-lg px-3 py-2 text-mtg-text text-sm focus:outline-none focus:border-mtg-gold/60 placeholder:text-mtg-muted"
         />
         <datalist id="archetypes">
-          {KNOWN_ARCHETYPES.map(a => <option key={a} value={a} />)}
+          {allArchetypes.map(a => <option key={a} value={a} />)}
         </datalist>
       </div>
 
