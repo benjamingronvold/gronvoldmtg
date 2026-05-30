@@ -7,7 +7,7 @@ import { useMatches } from '../hooks/useMatches.js'
 import { useAuth } from '../hooks/useAuth.jsx'
 
 export default function MatchTracker() {
-  const { matches, loading } = useMatches()
+  const { matches, loading, addMatch, refresh } = useMatches()
   const { isAdmin } = useAuth()
   const [tab, setTab] = useState('stats')
   const [showImport, setShowImport] = useState(false)
@@ -24,7 +24,7 @@ export default function MatchTracker() {
             ← Tilbake
           </button>
         </div>
-        <CsvImport onDone={() => setShowImport(false)} />
+        <CsvImport addMatch={addMatch} onDone={() => { refresh(); setShowImport(false) }} />
       </div>
     )
   }

@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react'
-import { useMatches } from '../../hooks/useMatches.js'
 
 const MÅNED_MAP = {
   jan: '01', feb: '02', mar: '03', apr: '04',
@@ -76,8 +75,7 @@ function SpillBrikke({ verdi }) {
   return <span className={p === 'W' ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>{p}</span>
 }
 
-export default function CsvImport({ onDone }) {
-  const { addMatch } = useMatches()
+export default function CsvImport({ addMatch, onDone }) {
   const [rows, setRows] = useState(null)
   const [importing, setImporting] = useState(false)
   const [imported, setImported] = useState(0)
@@ -236,16 +234,24 @@ Mar 2026;Jeskai Blink;W;L;`}</pre>
           )}
 
           {importing ? (
-            <p className="text-sm text-mtg-muted animate-pulse">Importerer {imported}/{gyldige.length}…</p>
+            <div className="space-y-1">
+              <p className="text-sm text-mtg-muted animate-pulse">Lagrer kamper… {imported}/{gyldige.length}</p>
+              <div className="h-1.5 bg-mtg-border rounded-full overflow-hidden w-64">
+                <div
+                  className="h-full bg-mtg-gold transition-all duration-200"
+                  style={{ width: `${(imported / gyldige.length) * 100}%` }}
+                />
+              </div>
+            </div>
           ) : imported > 0 && imported === gyldige.length && importErrors.length === 0 ? (
-            <p className="text-sm text-green-400">{imported} kamper importert!</p>
+            <p className="text-sm text-green-400 font-medium">{imported} kamper lagret!</p>
           ) : gyldige.length > 0 ? (
             <button
               onClick={handleImport}
-              className="bg-mtg-gold text-mtg-bg text-sm font-semibold px-4 py-2 rounded hover:brightness-110 transition-all"
+              className="bg-mtg-gold text-mtg-bg font-semibold px-6 py-2.5 rounded-lg hover:brightness-110 transition-all text-sm"
             >
-              Importer {gyldige.length} kamper
-              {feilRader.length > 0 && <span className="ml-1 opacity-70">({feilRader.length} utelatt)</span>}
+              Importer alle resultater ({gyldige.length} kamper)
+              {feilRader.length > 0 && <span className="ml-1 opacity-70">· {feilRader.length} utelatt</span>}
             </button>
           ) : (
             <p className="text-sm text-mtg-muted">Fiks radene over for å importere.</p>
