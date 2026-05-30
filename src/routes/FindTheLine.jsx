@@ -2,6 +2,7 @@ import { useState } from 'react'
 import ScenarioList from '../components/find-the-line/ScenarioList.jsx'
 import QuizMode from '../components/find-the-line/QuizMode.jsx'
 import ScenarioEditor from '../components/find-the-line/ScenarioEditor.jsx'
+import QuickCreate from '../components/find-the-line/QuickCreate.jsx'
 import { useStorage } from '../hooks/useStorage.js'
 import { useAuth } from '../hooks/useAuth.jsx'
 
@@ -26,6 +27,12 @@ export default function FindTheLine() {
   function handleNew() {
     if (!isAdmin) return
     setEditingScenario(null)
+    setView('quick-create')
+  }
+
+  function handleFullEditor() {
+    if (!isAdmin) return
+    setEditingScenario(null)
     setView('editor')
   }
 
@@ -39,21 +46,32 @@ export default function FindTheLine() {
     <div>
       <header className="border-b border-mtg-border bg-mtg-bg px-6 py-3 flex items-center justify-between">
         <button onClick={handleBack} className="font-display text-mtg-gold hover:brightness-110 transition">
-          🎯 Find the Line
+          Find the Line
         </button>
-        {view === 'list' && isAdmin && (
-          <button
-            onClick={handleNew}
-            className="bg-mtg-gold/20 hover:bg-mtg-gold/30 border border-mtg-gold/40 text-mtg-gold text-sm px-3 py-1.5 rounded transition-colors"
-          >
-            + New Scenario
-          </button>
-        )}
-        {view !== 'list' && (
-          <button onClick={handleBack} className="text-sm text-mtg-muted hover:text-mtg-text transition-colors">
-            ← Back
-          </button>
-        )}
+
+        <div className="flex items-center gap-2">
+          {view === 'list' && isAdmin && (
+            <button
+              onClick={handleNew}
+              className="bg-mtg-gold/20 hover:bg-mtg-gold/30 border border-mtg-gold/40 text-mtg-gold text-sm px-3 py-1.5 rounded transition-colors"
+            >
+              + Nytt scenario
+            </button>
+          )}
+          {view === 'quick-create' && isAdmin && (
+            <button
+              onClick={handleFullEditor}
+              className="text-sm text-mtg-muted hover:text-mtg-text border border-mtg-border rounded px-3 py-1.5 transition-colors"
+            >
+              Full editor
+            </button>
+          )}
+          {view !== 'list' && (
+            <button onClick={handleBack} className="text-sm text-mtg-muted hover:text-mtg-text transition-colors">
+              ← Tilbake
+            </button>
+          )}
+        </div>
       </header>
 
       <main>
@@ -70,6 +88,12 @@ export default function FindTheLine() {
         {view === 'editor' && isAdmin && (
           <ScenarioEditor
             scenario={editingScenario}
+            onSave={handleBack}
+            onCancel={handleBack}
+          />
+        )}
+        {view === 'quick-create' && isAdmin && (
+          <QuickCreate
             onSave={handleBack}
             onCancel={handleBack}
           />
