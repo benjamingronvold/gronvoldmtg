@@ -45,7 +45,7 @@ export default function MatchHistory() {
                 <td className="px-4 py-3 text-mtg-muted whitespace-nowrap">{m.played_at}</td>
                 <td className="px-4 py-3 text-mtg-text font-medium">{m.opponent_archetype}</td>
                 <td className="px-4 py-3">
-                  <span className={`font-semibold ${m.match_win ? 'text-mtg-success' : 'text-mtg-danger'}`}>
+                  <span className={`font-semibold ${m.match_win ? 'text-mtg-success' : m.result === '1-1-0' ? 'text-amber-400' : 'text-mtg-danger'}`}>
                     {m.result}
                   </span>
                 </td>

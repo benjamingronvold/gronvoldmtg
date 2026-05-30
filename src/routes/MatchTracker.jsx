@@ -3,6 +3,7 @@ import MatchForm from '../components/match-tracker/MatchForm.jsx'
 import MatchHistory from '../components/match-tracker/MatchHistory.jsx'
 import StatsPanel from '../components/match-tracker/StatsPanel.jsx'
 import CsvImport from '../components/match-tracker/CsvImport.jsx'
+import BulkEntry from '../components/match-tracker/BulkEntry.jsx'
 import { useMatches } from '../hooks/useMatches.js'
 import { useAuth } from '../hooks/useAuth.jsx'
 
@@ -10,21 +11,30 @@ export default function MatchTracker() {
   const { matches, loading, addMatch, refresh } = useMatches()
   const { isAdmin } = useAuth()
   const [tab, setTab] = useState('stats')
-  const [showImport, setShowImport] = useState(false)
+  const [panel, setPanel] = useState(null) // null | 'import' | 'bulk'
 
-  if (showImport) {
+  function closePanel() { refresh(); setPanel(null) }
+
+  if (panel === 'import') {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="font-display text-2xl text-mtg-text">Match Tracker</h1>
-          <button
-            onClick={() => setShowImport(false)}
-            className="text-sm text-mtg-muted hover:text-mtg-text transition-colors"
-          >
-            ← Tilbake
-          </button>
+          <button onClick={closePanel} className="text-sm text-mtg-muted hover:text-mtg-text transition-colors">← Tilbake</button>
         </div>
-        <CsvImport addMatch={addMatch} onDone={() => { refresh(); setShowImport(false) }} />
+        <CsvImport addMatch={addMatch} onDone={closePanel} />
+      </div>
+    )
+  }
+
+  if (panel === 'bulk') {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="font-display text-2xl text-mtg-text">Match Tracker</h1>
+          <button onClick={closePanel} className="text-sm text-mtg-muted hover:text-mtg-text transition-colors">← Tilbake</button>
+        </div>
+        <BulkEntry addMatch={addMatch} onDone={closePanel} />
       </div>
     )
   }
@@ -36,12 +46,20 @@ export default function MatchTracker() {
         <div className="flex items-center gap-3">
           <span className="text-mtg-muted text-sm">{matches.length} kamper logget</span>
           {isAdmin && (
-            <button
-              onClick={() => setShowImport(true)}
-              className="text-sm text-mtg-muted hover:text-mtg-text border border-mtg-border rounded px-3 py-1.5 transition-colors"
-            >
-              Importer CSV
-            </button>
+            <>
+              <button
+                onClick={() => setPanel('bulk')}
+                className="text-sm text-mtg-muted hover:text-mtg-text border border-mtg-border rounded px-3 py-1.5 transition-colors"
+              >
+                Per archetype
+              </button>
+              <button
+                onClick={() => setPanel('import')}
+                className="text-sm text-mtg-muted hover:text-mtg-text border border-mtg-border rounded px-3 py-1.5 transition-colors"
+              >
+                Importer CSV
+              </button>
+            </>
           )}
         </div>
       </div>
