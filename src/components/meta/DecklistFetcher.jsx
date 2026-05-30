@@ -11,29 +11,45 @@ async function fetchMoxfieldDecks(username) {
   const res = await fetch(url, {
     headers: {
       'Accept': 'application/json',
-      'Origin': 'https://www.moxfield.com',
       'Referer': 'https://www.moxfield.com/',
     },
   })
   if (!res.ok) throw new Error(`Moxfield svarte ${res.status}`)
   const json = await res.json()
-  const decks = json.data ?? json.decks ?? []
+  const allDecks = json.data ?? json.decks ?? []
 
-  const filtered = decks
+  console.log(`[Moxfield] ${username}: ${allDecks.length} decks totalt`)
+  if (allDecks.length > 0) {
+    const sample = allDecks[0]
+    console.log('[Moxfield] Eksempel felt:', {
+      format: sample.format,
+      lastUpdatedAtUtc: sample.lastUpdatedAtUtc,
+      updatedAtUtc: sample.updatedAtUtc,
+      name: sample.name,
+    })
+  }
+
+  const filtered = allDecks
     .filter(d => {
       const fmt = (d.format ?? '').toLowerCase()
-      if (fmt !== 'modern') return false
-      const updated = new Date(d.lastUpdatedAtUtc ?? d.updatedAtUtc ?? d.createdAtUtc).getTime()
+      const nameHasModern = (d.name ?? '').toLowerCase().includes('modern')
+      if (fmt !== 'modern' && !nameHasModern) return false
+
+      const rawDate = d.lastUpdatedAtUtc ?? d.updatedAtUtc ?? d.updatedAt ?? d.createdAtUtc
+      if (!rawDate) return true // inkluder hvis ingen dato
+      const updated = new Date(rawDate).getTime()
       return NOW - updated <= MS_30D
     })
     .map(d => {
-      const updated = new Date(d.lastUpdatedAtUtc ?? d.updatedAtUtc ?? d.createdAtUtc).getTime()
+      const rawDate = d.lastUpdatedAtUtc ?? d.updatedAtUtc ?? d.updatedAt ?? d.createdAtUtc
+      const updated = rawDate ? new Date(rawDate).getTime() : NOW
       const isRecent = NOW - updated <= MS_48H
       const daysAgo = Math.floor((NOW - updated) / (24 * 60 * 60 * 1000))
       const hoursAgo = Math.floor((NOW - updated) / (60 * 60 * 1000))
       return {
         id: d.publicId,
         name: d.name,
+        format: d.format ?? '?',
         url: `https://www.moxfield.com/decks/${d.publicId}`,
         isRecent,
         ageLabel: isRecent
@@ -43,7 +59,8 @@ async function fetchMoxfieldDecks(username) {
     })
     .sort((a, b) => (b.isRecent ? 1 : 0) - (a.isRecent ? 1 : 0))
 
-  return filtered
+  console.log(`[Moxfield] ${username}: ${filtered.length} Modern-decks etter filtrering`)
+  return { filtered, total: allDecks.length }
 }
 
 export default function DecklistFetcher({ players, tournamentId, onPlayersUpdated }) {
@@ -61,14 +78,13 @@ export default function DecklistFetcher({ players, tournamentId, onPlayersUpdate
   async function fetchOne(player) {
     setStatus(player.id, 'loading')
     try {
-      const decks = await fetchMoxfieldDecks(player.moxfield_username)
-      setDeckOptions(prev => ({ ...prev, [player.id]: decks }))
-      if (decks.length === 0) {
-        setStatus(player.id, 'empty')
+      const { filtered, total } = await fetchMoxfieldDecks(player.moxfield_username)
+      setDeckOptions(prev => ({ ...prev, [player.id]: { decks: filtered, total } }))
+      if (filtered.length === 0) {
+        setStatus(player.id, `empty:${total}`)
       } else {
         setStatus(player.id, 'done')
-        // Auto-select first (highest priority) deck
-        setSelectedDecks(prev => ({ ...prev, [player.id]: decks[0] }))
+        setSelectedDecks(prev => ({ ...prev, [player.id]: filtered[0] }))
       }
     } catch (err) {
       setStatus(player.id, `error:${err.message}`)
@@ -122,7 +138,7 @@ export default function DecklistFetcher({ players, tournamentId, onPlayersUpdate
       <div className="space-y-6">
         {localPlayers.map(player => {
           const status = statuses[player.id]
-          const decks = deckOptions[player.id] ?? []
+          const { decks = [], total = 0 } = deckOptions[player.id] ?? {}
           const selected = selectedDecks[player.id]
 
           return (
@@ -163,9 +179,12 @@ export default function DecklistFetcher({ players, tournamentId, onPlayersUpdate
               )}
 
               {/* Empty */}
-              {status === 'empty' && (
-                <p className="text-xs text-mtg-muted">
-                  Ingen Modern-decklists oppdatert siste 30 dager funnet.
+              {status?.startsWith('empty:') && (
+                <p className="text-xs text-amber-400 bg-amber-900/10 rounded px-3 py-2">
+                  {status.split(':')[1] === '0'
+                    ? 'Ingen decklists funnet for denne brukeren. Sjekk brukernavnet.'
+                    : `${status.split(':')[1]} decklists funnet, men ingen matcher Modern + siste 30 dager. Sjekk nettleserkonsollen for detaljer.`
+                  }
                 </p>
               )}
 
