@@ -15,73 +15,60 @@ function månedTilDato(måned) {
   return `${year}-${mm}-01`
 }
 
-function parseSpillResultat(verdi) {
+function parseSpill(verdi) {
   const v = (verdi ?? '').trim().toLowerCase()
   if (v === 'w' || v === 'win' || v === 'seier' || v === '1') return 'W'
   if (v === 'l' || v === 'loss' || v === 'tap' || v === '0') return 'L'
   return null
 }
 
-function spillTilMatchresultat(spill) {
-  const gyldige = spill.filter(s => s !== null)
-  const wins = gyldige.filter(s => s === 'W').length
-  const losses = gyldige.filter(s => s === 'L').length
-  if (wins === 2 && losses === 0) return '2-0'
-  if (wins === 2 && losses === 1) return '2-1'
-  if (wins === 2 && losses === 2) return '2-1' // 4-game format: 2 wins counts as match win
-  if (wins === 1 && losses === 2) return '1-2'
-  if (wins === 1 && losses >= 2) return '1-2'
-  if (wins === 0 && losses >= 2) return '0-2'
-  if (wins > losses) return '2-1'
-  return '1-2'
+function beregnResultat(pre1, pre2, post1) {
+  const p1 = parseSpill(pre1)
+  const p2 = parseSpill(pre2)
+
+  if (p1 === 'W' && p2 === 'W') return { result: '2-0', feil: null }
+  if (p1 === 'L' && p2 === 'L') return { result: '0-2', feil: null }
+
+  // Split — trenger Postboard1
+  if ((p1 === 'W' && p2 === 'L') || (p1 === 'L' && p2 === 'W')) {
+    const pb = parseSpill(post1)
+    if (pb === 'W') return { result: '2-1', feil: null }
+    if (pb === 'L') return { result: '1-2', feil: null }
+    return { result: null, feil: 'Split preboard — mangler Postboard1 (W/L)' }
+  }
+
+  return { result: null, feil: `Ugyldige preboard-verdier: "${pre1}" / "${pre2}"` }
 }
 
 function parseCSV(text) {
   const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
-  if (lines.length < 2) return { rows: [], errors: ['CSV-filen er tom eller mangler data'] }
+  if (lines.length < 2) return { rows: [], errors: [] }
 
   const rows = []
-  const errors = []
 
-  // Skip header line, parse data rows
   lines.slice(1).forEach((line, i) => {
-    // Handle both comma and tab separated
     const cols = line.includes('\t')
       ? line.split('\t').map(c => c.trim())
       : line.split(',').map(c => c.trim())
 
-    const [måned, deck, pre1, pre2, post1, post2] = cols
+    const [måned, deck, pre1, pre2, post1] = cols
 
-    if (!deck || deck === '') {
-      errors.push(`Linje ${i + 2}: mangler deck-navn`)
-      return
-    }
+    if (!deck) return
 
-    const spill = [
-      parseSpillResultat(pre1),
-      parseSpillResultat(pre2),
-      parseSpillResultat(post1),
-      parseSpillResultat(post2),
-    ].filter(s => s !== null)
-
-    if (spill.length < 2) {
-      errors.push(`Linje ${i + 2} (${deck}): for få gyldige spillresultater`)
-      return
-    }
-
-    const result = spillTilMatchresultat(spill)
     const played_at = månedTilDato(måned)
+    const { result, feil } = beregnResultat(pre1, pre2, post1)
 
     rows.push({
-      opponent_archetype: deck.trim(),
-      result,
+      id: i,
+      opponent_archetype: deck,
       played_at,
-      notes: null,
-      _spill: { pre1, pre2, post1, post2 },
+      result,
+      feil,
+      _raw: { pre1, pre2, post1 },
     })
   })
 
-  return { rows, errors }
+  return { rows }
 }
 
 const resultFarge = {
@@ -92,8 +79,8 @@ const resultFarge = {
 }
 
 function SpillBrikke({ verdi }) {
-  const parsed = parseSpillResultat(verdi)
-  if (!parsed) return <span className="text-mtg-muted/40">—</span>
+  const parsed = parseSpill(verdi)
+  if (!parsed) return <span className="text-mtg-muted/40 text-xs">—</span>
   return (
     <span className={parsed === 'W' ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>
       {parsed}
@@ -103,10 +90,10 @@ function SpillBrikke({ verdi }) {
 
 export default function CsvImport({ onDone }) {
   const { addMatch } = useMatches()
-  const [parsed, setParsed] = useState(null)
-  const [errors, setErrors] = useState([])
+  const [rows, setRows] = useState(null)
   const [importing, setImporting] = useState(false)
   const [imported, setImported] = useState(0)
+  const [importErrors, setImportErrors] = useState([])
   const fileRef = useRef()
 
   function handleFile(e) {
@@ -114,31 +101,38 @@ export default function CsvImport({ onDone }) {
     if (!file) return
     const reader = new FileReader()
     reader.onload = ev => {
-      const { rows, errors } = parseCSV(ev.target.result)
-      setParsed(rows)
-      setErrors(errors)
+      const { rows } = parseCSV(ev.target.result)
+      setRows(rows)
       setImported(0)
+      setImportErrors([])
     }
     reader.readAsText(file, 'UTF-8')
   }
 
+  function setManueltResultat(id, result) {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, result, feil: null } : r))
+  }
+
+  const feilRader = rows?.filter(r => r.feil) ?? []
+  const gyldige = rows?.filter(r => r.result) ?? []
+
   async function handleImport() {
-    if (!parsed?.length) return
+    if (!gyldige.length) return
     setImporting(true)
     let count = 0
-    const importErrors = []
-    for (const { _spill, ...row } of parsed) {
+    const errs = []
+    for (const { id, feil, _raw, ...row } of gyldige) {
       try {
-        await addMatch(row)
+        await addMatch({ ...row, notes: null })
         count++
         setImported(count)
       } catch (err) {
-        importErrors.push(`Feil ved import av "${row.opponent_archetype}": ${err.message}`)
+        errs.push(`Feil ved import av "${row.opponent_archetype}": ${err.message}`)
       }
     }
-    if (importErrors.length) setErrors(prev => [...prev, ...importErrors])
+    setImportErrors(errs)
     setImporting(false)
-    if (count > 0 && count === parsed.length) {
+    if (count > 0 && count === gyldige.length && errs.length === 0) {
       setTimeout(onDone, 1200)
     }
   }
@@ -147,18 +141,18 @@ export default function CsvImport({ onDone }) {
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-mtg-text mb-1">Importer kamper fra CSV</h2>
-        <p className="text-sm text-mtg-muted">Last opp en CSV- eller TSV-fil med kamphistorikk. Kolonner: <span className="font-mono text-mtg-text">Måned · Deck · Preboard · Preboard · Postboard1 · Postboard2</span></p>
+        <p className="text-sm text-mtg-muted">
+          Kolonner: <span className="font-mono text-mtg-text">Måned · Deck · Preboard · Preboard · Postboard1</span>
+        </p>
       </div>
 
       <div className="bg-mtg-card border border-mtg-border rounded-lg p-4 space-y-2">
-        <p className="text-xs font-mono text-mtg-muted">Forventet format (komma- eller tabulatorseparert):</p>
-        <pre className="text-xs text-mtg-text font-mono bg-mtg-bg rounded p-3 overflow-x-auto">
-{`Måned,Deck,Preboard,Preboard,Postboard1,Postboard2
-Januar,Amulet Titan,W,L,W,
-Februar,Burn,W,W,,
-Mars,Izzet Rhinos,L,L,,`}
-        </pre>
-        <p className="text-xs text-mtg-muted">Spillresultater: <strong>W</strong> = seier · <strong>L</strong> = tap. Tomme felt ignoreres.</p>
+        <p className="text-xs font-mono text-mtg-muted">Forventet format:</p>
+        <pre className="text-xs text-mtg-text font-mono bg-mtg-bg rounded p-3 overflow-x-auto">{`Måned,Deck,Preboard,Preboard,Postboard1
+Januar,Amulet Titan,W,L,W
+Februar,Burn,W,W,
+Mars,Izzet Rhinos,L,L,`}</pre>
+        <p className="text-xs text-mtg-muted">WW=2-0 · LL=0-2 · Split krever Postboard1</p>
       </div>
 
       <label className="block">
@@ -172,57 +166,106 @@ Mars,Izzet Rhinos,L,L,,`}
         />
       </label>
 
-      {errors.length > 0 && (
-        <div className="bg-red-900/20 border border-red-500/40 rounded-lg p-3 space-y-1">
-          {errors.map((e, i) => <p key={i} className="text-red-400 text-xs">• {e}</p>)}
-        </div>
-      )}
+      {rows !== null && (
+        <div className="space-y-4">
 
-      {parsed !== null && parsed.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm text-mtg-muted">{parsed.length} kamper funnet — forhåndsvisning:</p>
-          <div className="bg-mtg-card border border-mtg-border rounded-lg overflow-hidden max-h-72 overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="border-b border-mtg-border sticky top-0 bg-mtg-card">
-                <tr>
-                  {['Dato', 'Motstander', 'Pre 1', 'Pre 2', 'Post 1', 'Post 2', 'Match'].map(h => (
-                    <th key={h} className="px-3 py-2 text-left text-mtg-muted font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {parsed.map((row, i) => (
-                  <tr key={i} className="border-b border-mtg-border/40">
-                    <td className="px-3 py-2 text-mtg-muted">{row.played_at}</td>
-                    <td className="px-3 py-2 text-mtg-text">{row.opponent_archetype}</td>
-                    <td className="px-3 py-2"><SpillBrikke verdi={row._spill.pre1} /></td>
-                    <td className="px-3 py-2"><SpillBrikke verdi={row._spill.pre2} /></td>
-                    <td className="px-3 py-2"><SpillBrikke verdi={row._spill.post1} /></td>
-                    <td className="px-3 py-2"><SpillBrikke verdi={row._spill.post2} /></td>
-                    <td className={`px-3 py-2 font-semibold ${resultFarge[row.result]}`}>{row.result}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* Feilrader — manuell retting */}
+          {feilRader.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-amber-400">
+                {feilRader.length} rad{feilRader.length > 1 ? 'er' : ''} krever manuell retting:
+              </p>
+              <div className="bg-amber-900/10 border border-amber-500/30 rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="border-b border-amber-500/20">
+                    <tr>
+                      {['Dato', 'Motstander', 'Pre1', 'Pre2', 'Post1', 'Feil', 'Sett resultat'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-mtg-muted font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feilRader.map(row => (
+                      <tr key={row.id} className="border-b border-amber-500/10">
+                        <td className="px-3 py-2 text-mtg-muted">{row.played_at}</td>
+                        <td className="px-3 py-2 text-mtg-text">{row.opponent_archetype}</td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre1} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre2} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.post1} /></td>
+                        <td className="px-3 py-2 text-amber-400">{row.feil}</td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={row.result ?? ''}
+                            onChange={e => e.target.value && setManueltResultat(row.id, e.target.value)}
+                            className="bg-mtg-bg border border-mtg-border rounded px-2 py-1 text-mtg-text text-xs focus:outline-none focus:border-mtg-gold/60"
+                          >
+                            <option value="">— velg —</option>
+                            <option value="2-0">2-0</option>
+                            <option value="2-1">2-1</option>
+                            <option value="1-2">1-2</option>
+                            <option value="0-2">0-2</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Gyldige rader — forhåndsvisning */}
+          {gyldige.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm text-mtg-muted">{gyldige.length} gyldige kamper:</p>
+              <div className="bg-mtg-card border border-mtg-border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="border-b border-mtg-border sticky top-0 bg-mtg-card">
+                    <tr>
+                      {['Dato', 'Motstander', 'Pre1', 'Pre2', 'Post1', 'Resultat'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-mtg-muted font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gyldige.map(row => (
+                      <tr key={row.id} className="border-b border-mtg-border/40">
+                        <td className="px-3 py-2 text-mtg-muted">{row.played_at}</td>
+                        <td className="px-3 py-2 text-mtg-text">{row.opponent_archetype}</td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre1} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre2} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.post1} /></td>
+                        <td className={`px-3 py-2 font-semibold ${resultFarge[row.result]}`}>{row.result}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {importErrors.length > 0 && (
+            <div className="bg-red-900/20 border border-red-500/40 rounded-lg p-3 space-y-1">
+              {importErrors.map((e, i) => <p key={i} className="text-red-400 text-xs">• {e}</p>)}
+            </div>
+          )}
 
           {importing ? (
-            <p className="text-sm text-mtg-muted animate-pulse">Importerer {imported}/{parsed.length}…</p>
-          ) : imported > 0 && imported === parsed.length ? (
+            <p className="text-sm text-mtg-muted animate-pulse">Importerer {imported}/{gyldige.length}…</p>
+          ) : imported > 0 && imported === gyldige.length && importErrors.length === 0 ? (
             <p className="text-sm text-green-400">{imported} kamper importert!</p>
-          ) : (
+          ) : gyldige.length > 0 ? (
             <button
               onClick={handleImport}
               className="bg-mtg-gold text-mtg-bg text-sm font-semibold px-4 py-2 rounded hover:brightness-110 transition-all"
             >
-              Importer {parsed.length} kamper
+              Importer {gyldige.length} kamper
+              {feilRader.length > 0 && <span className="ml-1 opacity-70">({feilRader.length} utelatt)</span>}
             </button>
+          ) : (
+            <p className="text-sm text-mtg-muted">Fiks de røde radene over for å importere.</p>
           )}
         </div>
-      )}
-
-      {parsed !== null && parsed.length === 0 && errors.length === 0 && (
-        <p className="text-sm text-mtg-muted">Ingen gyldige rader funnet i filen.</p>
       )}
     </div>
   )
