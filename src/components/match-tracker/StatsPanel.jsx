@@ -32,9 +32,10 @@ export default function StatsPanel({ matches }) {
     const map = {}
     for (const m of filtered) {
       const arch = m.opponent_archetype || 'Unknown'
-      if (!map[arch]) map[arch] = { archetype: arch, matches: 0, matchWins: 0, gameWins: 0, gameLosses: 0 }
+      if (!map[arch]) map[arch] = { archetype: arch, matches: 0, matchWins: 0, matchDraws: 0, gameWins: 0, gameLosses: 0 }
       map[arch].matches++
       if (m.match_win) map[arch].matchWins++
+      if (m.result === '1-1-0') map[arch].matchDraws++
       map[arch].gameWins += m.game_wins ?? 0
       map[arch].gameLosses += m.game_losses ?? 0
     }
@@ -56,6 +57,8 @@ export default function StatsPanel({ matches }) {
 
   const totalMatches = filtered.length
   const totalWins = filtered.filter(m => m.match_win).length
+  const totalDraws = filtered.filter(m => m.result === '1-1-0').length
+  const totalLosses = totalMatches - totalWins - totalDraws
   const totalGameWins = filtered.reduce((s, m) => s + (m.game_wins ?? 0), 0)
   const totalGameLosses = filtered.reduce((s, m) => s + (m.game_losses ?? 0), 0)
 
@@ -98,7 +101,7 @@ export default function StatsPanel({ matches }) {
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Match Record', value: `${totalWins}–${totalMatches - totalWins}` },
+          { label: 'Match Record', value: totalDraws > 0 ? `${totalWins}–${totalLosses}–${totalDraws}` : `${totalWins}–${totalLosses}` },
           { label: 'Match Win%', value: `${pct(totalWins, totalMatches)}%` },
           { label: 'Game Record', value: `${totalGameWins}–${totalGameLosses}` },
           { label: 'Game Win%', value: `${pct(totalGameWins, totalGameWins + totalGameLosses)}%` },
@@ -156,7 +159,7 @@ export default function StatsPanel({ matches }) {
                 <tr key={s.archetype} className="border-b border-mtg-border/50 hover:bg-mtg-bg/30">
                   <td className="px-4 py-3 text-mtg-text font-medium">{s.archetype}</td>
                   <td className="px-4 py-3 text-mtg-muted">
-                    {s.matchWins}–{s.matches - s.matchWins}
+                    {s.matchWins}–{s.matches - s.matchWins - s.matchDraws}{s.matchDraws > 0 ? `–${s.matchDraws}` : ''}
                   </td>
                   <td className={`px-4 py-3 font-semibold ${s.mwPct >= 50 ? 'text-mtg-success' : 'text-mtg-danger'}`}>
                     {s.mwPct}%

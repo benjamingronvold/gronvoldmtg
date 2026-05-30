@@ -22,6 +22,7 @@ function parseSpill(verdi) {
   const v = (verdi ?? '').trim().toLowerCase()
   if (v === 'w' || v === 'win' || v === 'seier' || v === '1') return 'W'
   if (v === 'l' || v === 'loss' || v === 'tap' || v === '0') return 'L'
+  if (v === 'd' || v === 'draw' || v === 'uavgjort') return 'D'
   return null
 }
 
@@ -39,7 +40,8 @@ function beregnResultat(g1, g2, g3) {
   const p3 = parseSpill(g3)
   if (p3 === 'W') return { result: '2-1', feil: null }
   if (p3 === 'L') return { result: '1-2', feil: null }
-  return { result: null, feil: 'Split (G1≠G2) — mangler Postboard2' }
+  if (p3 === 'D') return { result: '1-1-0', feil: null }
+  return { result: null, feil: 'Split (G1≠G2) — mangler Postboard2 (W/L/D)' }
 }
 
 function parseCSV(text) {
@@ -67,6 +69,7 @@ function parseCSV(text) {
 const resultFarge = {
   '2-0': 'text-green-400', '2-1': 'text-green-400',
   '1-2': 'text-red-400', '0-2': 'text-red-400',
+  '1-1-0': 'text-amber-400',
 }
 
 function SpillBrikke({ verdi }) {
@@ -188,6 +191,7 @@ Mar 2026;Jeskai Blink;W;L;`}</pre>
                             <option value="2-1">2-1</option>
                             <option value="1-2">1-2</option>
                             <option value="0-2">0-2</option>
+                            <option value="1-1-0">1-1-0 (draw)</option>
                           </select>
                         </td>
                       </tr>

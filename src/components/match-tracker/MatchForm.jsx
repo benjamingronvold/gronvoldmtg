@@ -10,7 +10,7 @@ const KNOWN_ARCHETYPES = [
   'Lantern Control', 'Belcher', 'Creativity', 'Grinding Station', 'Other',
 ]
 
-const RESULTS = ['2-0', '2-1', '1-2', '0-2']
+const RESULTS = ['2-0', '2-1', '1-2', '0-2', '1-1-0']
 
 export default function MatchForm({ onSuccess }) {
   const { addMatch, matches } = useMatches()
@@ -80,7 +80,7 @@ export default function MatchForm({ onSuccess }) {
               />
               <span className={`block px-3 py-1.5 rounded border text-sm font-medium transition-all
                 ${form.result === r
-                  ? r.startsWith('2') ? 'bg-mtg-success/20 border-mtg-success text-mtg-success' : 'bg-mtg-danger/20 border-mtg-danger text-mtg-danger'
+                  ? r === '1-1-0' ? 'bg-amber-500/20 border-amber-400 text-amber-400' : r.startsWith('2') ? 'bg-mtg-success/20 border-mtg-success text-mtg-success' : 'bg-mtg-danger/20 border-mtg-danger text-mtg-danger'
                   : 'bg-mtg-bg border-mtg-border text-mtg-muted hover:border-mtg-gold/40'
                 }`}
               >
