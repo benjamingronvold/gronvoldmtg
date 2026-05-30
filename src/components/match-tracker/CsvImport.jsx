@@ -51,6 +51,8 @@ function parseCSV(text) {
       ? line.split('\t').map(c => c.trim())
       : line.split(',').map(c => c.trim())
 
+    if (cols.every(c => !c)) return
+
     const [måned, deck, pre1, pre2, post1] = cols
 
     if (!deck) return
