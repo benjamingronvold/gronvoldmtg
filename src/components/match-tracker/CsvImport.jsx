@@ -1,18 +1,22 @@
 import { useState, useRef } from 'react'
 import { useMatches } from '../../hooks/useMatches.js'
 
-const NORSK_MÅNEDER = {
-  januar: '01', februar: '02', mars: '03', april: '04',
-  mai: '05', juni: '06', juli: '07', august: '08',
-  september: '09', oktober: '10', november: '11', desember: '12',
+const MÅNED_MAP = {
+  jan: '01', feb: '02', mar: '03', apr: '04',
+  mai: '05', may: '05', jun: '06', jul: '07',
+  aug: '08', sep: '09', okt: '10', oct: '10',
+  nov: '11', des: '12', dec: '12',
 }
 
 function månedTilDato(måned) {
-  const key = (måned ?? '').toLowerCase().trim()
-  const mm = NORSK_MÅNEDER[key]
-  if (!mm) return new Date().toISOString().slice(0, 10)
-  const year = new Date().getFullYear()
-  return `${year}-${mm}-01`
+  // Format: "Apr 2026", "Jan 2024", "Des 2023" etc.
+  const parts = (måned ?? '').trim().split(/\s+/)
+  if (parts.length === 2) {
+    const mm = MÅNED_MAP[parts[0].toLowerCase().slice(0, 3)]
+    const yyyy = parts[1]
+    if (mm && /^\d{4}$/.test(yyyy)) return `${yyyy}-${mm}-01`
+  }
+  return new Date().toISOString().slice(0, 10)
 }
 
 function parseSpill(verdi) {
@@ -22,72 +26,54 @@ function parseSpill(verdi) {
   return null
 }
 
-function beregnResultat(pre1, pre2, post1) {
-  const p1 = parseSpill(pre1)
-  const p2 = parseSpill(pre2)
+function beregnResultat(g1, g2, g3) {
+  const p1 = parseSpill(g1)
+  const p2 = parseSpill(g2)
+
+  if (!p1) return { result: null, feil: `Mangler G1-resultat` }
+  if (!p2) return { result: null, feil: `Mangler G2-resultat (Postboard1)` }
 
   if (p1 === 'W' && p2 === 'W') return { result: '2-0', feil: null }
   if (p1 === 'L' && p2 === 'L') return { result: '0-2', feil: null }
 
-  // Split — trenger Postboard1
-  if ((p1 === 'W' && p2 === 'L') || (p1 === 'L' && p2 === 'W')) {
-    const pb = parseSpill(post1)
-    if (pb === 'W') return { result: '2-1', feil: null }
-    if (pb === 'L') return { result: '1-2', feil: null }
-    return { result: null, feil: 'Split preboard — mangler Postboard1 (W/L)' }
-  }
-
-  return { result: null, feil: `Ugyldige preboard-verdier: "${pre1}" / "${pre2}"` }
+  // Split — trenger G3
+  const p3 = parseSpill(g3)
+  if (p3 === 'W') return { result: '2-1', feil: null }
+  if (p3 === 'L') return { result: '1-2', feil: null }
+  return { result: null, feil: 'Split (G1≠G2) — mangler Postboard2' }
 }
 
 function parseCSV(text) {
   const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
-  if (lines.length < 2) return { rows: [], errors: [] }
+  if (lines.length < 2) return { rows: [] }
 
   const rows = []
 
   lines.slice(1).forEach((line, i) => {
-    const cols = line.includes('\t')
-      ? line.split('\t').map(c => c.trim())
-      : line.split(',').map(c => c.trim())
-
+    const cols = line.split(';').map(c => c.trim())
     if (cols.every(c => !c)) return
 
-    const [måned, deck, pre1, pre2, post1] = cols
-
+    const [måned, deck, g1, g2, g3] = cols
     if (!deck) return
 
     const played_at = månedTilDato(måned)
-    const { result, feil } = beregnResultat(pre1, pre2, post1)
+    const { result, feil } = beregnResultat(g1, g2, g3)
 
-    rows.push({
-      id: i,
-      opponent_archetype: deck,
-      played_at,
-      result,
-      feil,
-      _raw: { pre1, pre2, post1 },
-    })
+    rows.push({ id: i, opponent_archetype: deck.trim(), played_at, result, feil, _raw: { g1, g2, g3 } })
   })
 
   return { rows }
 }
 
 const resultFarge = {
-  '2-0': 'text-green-400',
-  '2-1': 'text-green-400',
-  '1-2': 'text-red-400',
-  '0-2': 'text-red-400',
+  '2-0': 'text-green-400', '2-1': 'text-green-400',
+  '1-2': 'text-red-400', '0-2': 'text-red-400',
 }
 
 function SpillBrikke({ verdi }) {
-  const parsed = parseSpill(verdi)
-  if (!parsed) return <span className="text-mtg-muted/40 text-xs">—</span>
-  return (
-    <span className={parsed === 'W' ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>
-      {parsed}
-    </span>
-  )
+  const p = parseSpill(verdi)
+  if (!p) return <span className="text-mtg-muted/40 text-xs">—</span>
+  return <span className={p === 'W' ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>{p}</span>
 }
 
 export default function CsvImport({ onDone }) {
@@ -144,25 +130,24 @@ export default function CsvImport({ onDone }) {
       <div>
         <h2 className="text-lg font-semibold text-mtg-text mb-1">Importer kamper fra CSV</h2>
         <p className="text-sm text-mtg-muted">
-          Kolonner: <span className="font-mono text-mtg-text">Måned · Deck · Preboard · Preboard · Postboard1</span>
+          Format: <span className="font-mono text-mtg-text">Måned;Deck;Preboard;Postboard1;Postboard2</span> (semikolonseparert)
         </p>
       </div>
 
       <div className="bg-mtg-card border border-mtg-border rounded-lg p-4 space-y-2">
-        <p className="text-xs font-mono text-mtg-muted">Forventet format:</p>
-        <pre className="text-xs text-mtg-text font-mono bg-mtg-bg rounded p-3 overflow-x-auto">{`Måned,Deck,Preboard,Preboard,Postboard1
-Januar,Amulet Titan,W,L,W
-Februar,Burn,W,W,
-Mars,Izzet Rhinos,L,L,`}</pre>
-        <p className="text-xs text-mtg-muted">WW=2-0 · LL=0-2 · Split krever Postboard1</p>
+        <pre className="text-xs text-mtg-text font-mono bg-mtg-bg rounded p-3 overflow-x-auto">{`Måned;Deck;Preboard;Postboard1;Postboard2
+Apr 2026;Amulet Titan;W;W;
+Apr 2026;Boros;L;W;W
+Mar 2026;Jeskai Blink;W;L;`}</pre>
+        <p className="text-xs text-mtg-muted">WW=2-0 · LL=0-2 · Split krever Postboard2 for avgjørelse</p>
       </div>
 
       <label className="block">
-        <span className="text-sm text-mtg-muted block mb-2">Velg fil (.csv eller .tsv)</span>
+        <span className="text-sm text-mtg-muted block mb-2">Velg CSV-fil</span>
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,.tsv,text/csv,text/tab-separated-values"
+          accept=".csv,.tsv,text/csv"
           onChange={handleFile}
           className="block text-sm text-mtg-muted file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-mtg-border file:bg-mtg-card file:text-mtg-text file:text-xs hover:file:bg-mtg-border/30 file:cursor-pointer"
         />
@@ -171,7 +156,6 @@ Mars,Izzet Rhinos,L,L,`}</pre>
       {rows !== null && (
         <div className="space-y-4">
 
-          {/* Feilrader — manuell retting */}
           {feilRader.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-amber-400">
@@ -181,7 +165,7 @@ Mars,Izzet Rhinos,L,L,`}</pre>
                 <table className="w-full text-xs">
                   <thead className="border-b border-amber-500/20">
                     <tr>
-                      {['Dato', 'Motstander', 'Pre1', 'Pre2', 'Post1', 'Feil', 'Sett resultat'].map(h => (
+                      {['Dato', 'Motstander', 'G1', 'G2', 'G3', 'Feil', 'Sett resultat'].map(h => (
                         <th key={h} className="px-3 py-2 text-left text-mtg-muted font-medium">{h}</th>
                       ))}
                     </tr>
@@ -191,9 +175,9 @@ Mars,Izzet Rhinos,L,L,`}</pre>
                       <tr key={row.id} className="border-b border-amber-500/10">
                         <td className="px-3 py-2 text-mtg-muted">{row.played_at}</td>
                         <td className="px-3 py-2 text-mtg-text">{row.opponent_archetype}</td>
-                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre1} /></td>
-                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre2} /></td>
-                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.post1} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.g1} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.g2} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.g3} /></td>
                         <td className="px-3 py-2 text-amber-400">{row.feil}</td>
                         <td className="px-3 py-2">
                           <select
@@ -216,7 +200,6 @@ Mars,Izzet Rhinos,L,L,`}</pre>
             </div>
           )}
 
-          {/* Gyldige rader — forhåndsvisning */}
           {gyldige.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm text-mtg-muted">{gyldige.length} gyldige kamper:</p>
@@ -224,7 +207,7 @@ Mars,Izzet Rhinos,L,L,`}</pre>
                 <table className="w-full text-xs">
                   <thead className="border-b border-mtg-border sticky top-0 bg-mtg-card">
                     <tr>
-                      {['Dato', 'Motstander', 'Pre1', 'Pre2', 'Post1', 'Resultat'].map(h => (
+                      {['Dato', 'Motstander', 'G1', 'G2', 'G3', 'Resultat'].map(h => (
                         <th key={h} className="px-3 py-2 text-left text-mtg-muted font-medium">{h}</th>
                       ))}
                     </tr>
@@ -234,9 +217,9 @@ Mars,Izzet Rhinos,L,L,`}</pre>
                       <tr key={row.id} className="border-b border-mtg-border/40">
                         <td className="px-3 py-2 text-mtg-muted">{row.played_at}</td>
                         <td className="px-3 py-2 text-mtg-text">{row.opponent_archetype}</td>
-                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre1} /></td>
-                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.pre2} /></td>
-                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.post1} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.g1} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.g2} /></td>
+                        <td className="px-3 py-2"><SpillBrikke verdi={row._raw.g3} /></td>
                         <td className={`px-3 py-2 font-semibold ${resultFarge[row.result]}`}>{row.result}</td>
                       </tr>
                     ))}
@@ -265,7 +248,7 @@ Mars,Izzet Rhinos,L,L,`}</pre>
               {feilRader.length > 0 && <span className="ml-1 opacity-70">({feilRader.length} utelatt)</span>}
             </button>
           ) : (
-            <p className="text-sm text-mtg-muted">Fiks de røde radene over for å importere.</p>
+            <p className="text-sm text-mtg-muted">Fiks radene over for å importere.</p>
           )}
         </div>
       )}
