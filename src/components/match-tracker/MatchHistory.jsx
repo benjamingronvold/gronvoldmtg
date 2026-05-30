@@ -4,44 +4,150 @@ import { useMatches } from '../../hooks/useMatches.js'
 const PAGE_SIZE = 20
 
 export default function MatchHistory() {
-  const { matches, deleteMatch } = useMatches()
+  const { matches, deleteMatch, deleteMatches } = useMatches()
   const [page, setPage] = useState(1)
-  const [deleting, setDeleting] = useState(null)
+  const [selected, setSelected] = useState(new Set())
+  const [deleting, setDeleting] = useState(false)
+  const [confirmBulk, setConfirmBulk] = useState(false)
 
   const total = matches.length
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const paginated = matches.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const allOnPageSelected = paginated.length > 0 && paginated.every(m => selected.has(m.id))
+  const allSelected = selected.size === total
 
-  async function handleDelete(id) {
-    if (!confirm('Delete this match?')) return
-    setDeleting(id)
-    try { await deleteMatch(id) } finally { setDeleting(null) }
+  function toggleOne(id) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function togglePage() {
+    if (allOnPageSelected) {
+      setSelected(prev => {
+        const next = new Set(prev)
+        paginated.forEach(m => next.delete(m.id))
+        return next
+      })
+    } else {
+      setSelected(prev => {
+        const next = new Set(prev)
+        paginated.forEach(m => next.add(m.id))
+        return next
+      })
+    }
+  }
+
+  function selectAll() {
+    setSelected(new Set(matches.map(m => m.id)))
+  }
+
+  function clearSelection() {
+    setSelected(new Set())
+    setConfirmBulk(false)
+  }
+
+  async function handleDeleteSelected() {
+    setDeleting(true)
+    try {
+      await deleteMatches([...selected])
+      setSelected(new Set())
+      setConfirmBulk(false)
+      setPage(1)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   if (!matches.length) {
     return (
       <div className="text-center py-12 text-mtg-muted text-sm">
-        No matches logged yet. Log your first match above!
+        Ingen kamper logget ennå.
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-mtg-card border border-mtg-border rounded-lg px-4 py-2.5">
+          <span className="text-sm text-mtg-text font-medium">{selected.size} valgt</span>
+          {!allSelected && (
+            <button onClick={selectAll} className="text-xs text-mtg-muted hover:text-mtg-text underline">
+              Velg alle {total}
+            </button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {confirmBulk ? (
+              <>
+                <span className="text-xs text-red-400">Slette {selected.size} kamper?</span>
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={deleting}
+                  className="text-xs px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/40 rounded hover:bg-red-500/30 disabled:opacity-50"
+                >
+                  {deleting ? '…' : 'Ja, slett'}
+                </button>
+                <button onClick={() => setConfirmBulk(false)} className="text-xs text-mtg-muted hover:text-mtg-text">
+                  Avbryt
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setConfirmBulk(true)}
+                  className="text-xs px-3 py-1.5 text-red-400 border border-red-500/40 rounded hover:bg-red-500/10 transition-colors"
+                >
+                  Slett valgte
+                </button>
+                <button onClick={clearSelection} className="text-xs text-mtg-muted hover:text-mtg-text">
+                  Avbryt valg
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="bg-mtg-card border border-mtg-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="border-b border-mtg-border">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider">Opponent</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider">Result</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider hidden sm:table-cell">Notes</th>
-              <th className="px-4 py-3" />
+              <th className="px-3 py-3 w-8">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={togglePage}
+                  className="rounded accent-mtg-gold cursor-pointer"
+                />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider">Dato</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider">Motstander</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider">Resultat</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-mtg-muted uppercase tracking-wider hidden sm:table-cell">Notater</th>
+              <th className="px-4 py-3 w-8" />
             </tr>
           </thead>
           <tbody>
             {paginated.map(m => (
-              <tr key={m.id} className="border-b border-mtg-border/50 hover:bg-mtg-bg/30">
+              <tr
+                key={m.id}
+                className={`border-b border-mtg-border/50 cursor-pointer transition-colors
+                  ${selected.has(m.id) ? 'bg-mtg-gold/5' : 'hover:bg-mtg-bg/30'}`}
+                onClick={() => toggleOne(m.id)}
+              >
+                <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(m.id)}
+                    onChange={() => toggleOne(m.id)}
+                    className="rounded accent-mtg-gold cursor-pointer"
+                  />
+                </td>
                 <td className="px-4 py-3 text-mtg-muted whitespace-nowrap">{m.played_at}</td>
                 <td className="px-4 py-3 text-mtg-text font-medium">{m.opponent_archetype}</td>
                 <td className="px-4 py-3">
@@ -52,13 +158,15 @@ export default function MatchHistory() {
                 <td className="px-4 py-3 text-mtg-muted text-xs hidden sm:table-cell max-w-xs truncate">
                   {m.notes}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                   <button
-                    onClick={() => handleDelete(m.id)}
-                    disabled={deleting === m.id}
+                    onClick={async () => {
+                      setDeleting(true)
+                      try { await deleteMatch(m.id) } finally { setDeleting(false) }
+                    }}
                     className="text-mtg-muted hover:text-mtg-danger text-xs transition-colors"
                   >
-                    {deleting === m.id ? '…' : '✕'}
+                    ✕
                   </button>
                 </td>
               </tr>
@@ -69,22 +177,22 @@ export default function MatchHistory() {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-mtg-muted">
-          <span>{total} matches total</span>
+          <span>{total} kamper totalt</span>
           <div className="flex gap-2">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-3 py-1 border border-mtg-border rounded hover:border-mtg-gold/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1 border border-mtg-border rounded hover:border-mtg-gold/40 disabled:opacity-40 transition-colors"
             >
-              ← Prev
+              ← Forrige
             </button>
             <span className="px-3 py-1">{page} / {totalPages}</span>
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="px-3 py-1 border border-mtg-border rounded hover:border-mtg-gold/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1 border border-mtg-border rounded hover:border-mtg-gold/40 disabled:opacity-40 transition-colors"
             >
-              Next →
+              Neste →
             </button>
           </div>
         </div>

@@ -43,5 +43,11 @@ export function useMatches() {
     setMatches(prev => prev.filter(m => m.id !== id))
   }
 
-  return { matches, loading, error, addMatch, deleteMatch, refresh: fetchMatches }
+  async function deleteMatches(ids) {
+    const { error } = await supabase.from('matches').delete().in('id', ids)
+    if (error) throw error
+    setMatches(prev => prev.filter(m => !ids.includes(m.id)))
+  }
+
+  return { matches, loading, error, addMatch, deleteMatch, deleteMatches, refresh: fetchMatches }
 }
