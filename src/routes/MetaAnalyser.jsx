@@ -13,7 +13,7 @@ export default function MetaAnalyser() {
   const [players, setPlayers] = useState([])
   const [loadingPlayers, setLoadingPlayers] = useState(false)
   const [tab, setTab] = useState('players')
-  const [addForm, setAddForm] = useState({ display_name: '', moxfield_username: '', mtgo_username: '' })
+  const [addForm, setAddForm] = useState({ display_name: '', moxfield_username: '', mtgo_username: '', archetype: '', decklist_url: '' })
   const [addingPlayer, setAddingPlayer] = useState(false)
 
   useEffect(() => {
@@ -62,13 +62,19 @@ export default function MetaAnalyser() {
     setAddingPlayer(false)
     if (error) { alert(error.message); return }
     setPlayers(prev => [...prev, data])
-    setAddForm({ display_name: '', moxfield_username: '', mtgo_username: '' })
+    setAddForm({ display_name: '', moxfield_username: '', mtgo_username: '', archetype: '', decklist_url: '' })
   }
 
   async function handleDeletePlayer(id) {
     if (!confirm('Remove this player?')) return
     await supabase.from('tournament_players').delete().eq('id', id)
     setPlayers(prev => prev.filter(p => p.id !== id))
+  }
+
+  async function handleUpdatePlayer(id, changes) {
+    const { error } = await supabase.from('tournament_players').update(changes).eq('id', id)
+    if (error) { alert(error.message); return }
+    setPlayers(prev => prev.map(p => p.id === id ? { ...p, ...changes } : p))
   }
 
   return (
@@ -128,6 +134,21 @@ export default function MetaAnalyser() {
                 placeholder="MTGO username"
                 className="flex-1 min-w-32 bg-mtg-bg border border-mtg-border rounded-lg px-3 py-2 text-sm text-mtg-text placeholder:text-mtg-muted focus:outline-none focus:border-mtg-gold/60"
               />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={addForm.archetype}
+                onChange={e => setAddForm(f => ({ ...f, archetype: e.target.value }))}
+                placeholder="Archetype (valgfritt)"
+                className="flex-1 min-w-32 bg-mtg-bg border border-mtg-border rounded-lg px-3 py-2 text-sm text-mtg-text placeholder:text-mtg-muted focus:outline-none focus:border-mtg-gold/60"
+              />
+              <input
+                value={addForm.decklist_url}
+                onChange={e => setAddForm(f => ({ ...f, decklist_url: e.target.value }))}
+                placeholder="Decklist URL (valgfritt)"
+                type="url"
+                className="flex-1 min-w-48 bg-mtg-bg border border-mtg-border rounded-lg px-3 py-2 text-sm text-mtg-text placeholder:text-mtg-muted focus:outline-none focus:border-mtg-gold/60"
+              />
               <button
                 type="submit"
                 disabled={addingPlayer}
@@ -164,15 +185,12 @@ export default function MetaAnalyser() {
                     </p>
                   ) : (
                     players.map(p => (
-                      <div key={p.id} className="relative group">
-                        <PlayerCard player={p} />
-                        <button
-                          onClick={() => handleDeletePlayer(p.id)}
-                          className="absolute top-3 right-3 text-mtg-muted hover:text-mtg-danger opacity-0 group-hover:opacity-100 transition-all text-xs"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      <PlayerCard
+                        key={p.id}
+                        player={p}
+                        onUpdate={handleUpdatePlayer}
+                        onDelete={handleDeletePlayer}
+                      />
                     ))
                   )}
                 </div>
