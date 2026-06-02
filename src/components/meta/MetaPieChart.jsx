@@ -102,7 +102,16 @@ export default function MetaPieChart({ players }) {
             </Pie>
             <Tooltip content={<CustomTooltip />} />
             <Legend
-              formatter={(value) => <span style={{ color: '#e8e8f0', fontSize: 12 }}>{value}</span>}
+              formatter={(value, entry) => {
+                const total = data.reduce((s, d) => s + d.count, 0)
+                const pct = total > 0 ? Math.round((entry.payload.count / total) * 100) : 0
+                return (
+                  <span style={{ color: '#e8e8f0', fontSize: 12 }}>
+                    {value}{' '}
+                    <span style={{ color: '#a0a0b8', fontSize: 11 }}>({pct}%)</span>
+                  </span>
+                )
+              }}
             />
           </PieChart>
         </ResponsiveContainer>
