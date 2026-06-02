@@ -4,6 +4,7 @@ import MatchHistory from '../components/match-tracker/MatchHistory.jsx'
 import StatsPanel from '../components/match-tracker/StatsPanel.jsx'
 import CsvImport from '../components/match-tracker/CsvImport.jsx'
 import BulkEntry from '../components/match-tracker/BulkEntry.jsx'
+import DeckManager from '../components/match-tracker/DeckManager.jsx'
 import { useMatches } from '../hooks/useMatches.js'
 import { useAuth } from '../hooks/useAuth.jsx'
 
@@ -11,6 +12,7 @@ export default function MatchTracker() {
   const { matches, loading, addMatch, refresh } = useMatches()
   const { isAdmin } = useAuth()
   const [tab, setTab] = useState('stats')
+  const TABS = [['stats', 'Statistikk'], ['history', 'Historikk'], ['decks', 'Dekker']]
   const [panel, setPanel] = useState(null) // null | 'import' | 'bulk'
 
   function closePanel() { refresh(); setPanel(null) }
@@ -69,19 +71,21 @@ export default function MatchTracker() {
 
         <div className="space-y-4">
           <div className="flex gap-1 bg-mtg-card border border-mtg-border rounded-lg p-1 w-fit">
-            {['stats', 'history'].map(t => (
+            {TABS.map(([key, label]) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-1.5 rounded text-sm font-medium capitalize transition-all
-                  ${tab === t ? 'bg-mtg-gold text-mtg-bg' : 'text-mtg-muted hover:text-mtg-text'}`}
+                key={key}
+                onClick={() => setTab(key)}
+                className={`px-4 py-1.5 rounded text-sm font-medium transition-all
+                  ${tab === key ? 'bg-mtg-gold text-mtg-bg' : 'text-mtg-muted hover:text-mtg-text'}`}
               >
-                {t === 'stats' ? 'Statistikk' : 'Historikk'}
+                {label}
               </button>
             ))}
           </div>
 
-          {loading ? (
+          {tab === 'decks' ? (
+            <DeckManager />
+          ) : loading ? (
             <div className="text-center py-12 text-mtg-muted animate-pulse">Laster kamper…</div>
           ) : tab === 'stats' ? (
             <StatsPanel matches={matches} />

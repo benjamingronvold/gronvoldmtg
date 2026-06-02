@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useMatches } from '../../hooks/useMatches.js'
+import { useDecks } from '../../hooks/useDecks.js'
 
 const KNOWN_ARCHETYPES = [
   'Amulet Titan', 'Boros Energy', 'Dimir Frog', 'Living End', 'Murktide Regent',
@@ -14,12 +15,14 @@ const RESULTS = ['2-0', '2-1', '1-2', '0-2', '1-1-0']
 
 export default function MatchForm({ onSuccess }) {
   const { addMatch, matches } = useMatches()
+  const { decks } = useDecks()
 
   const allArchetypes = useMemo(() => {
     const fromHistory = matches.map(m => m.opponent_archetype).filter(Boolean)
     return [...new Set([...KNOWN_ARCHETYPES, ...fromHistory])].sort()
   }, [matches])
   const [form, setForm] = useState({
+    my_deck: '',
     opponent_archetype: '',
     result: '',
     played_at: new Date().toISOString().slice(0, 10),
@@ -36,6 +39,7 @@ export default function MatchForm({ onSuccess }) {
     try {
       await addMatch(form)
       setForm(f => ({ ...f, opponent_archetype: '', result: '', notes: '' }))
+      // keep my_deck selected between matches
       onSuccess?.()
     } catch (err) {
       setError(err.message)
@@ -47,6 +51,24 @@ export default function MatchForm({ onSuccess }) {
   return (
     <form onSubmit={handleSubmit} className="bg-mtg-card border border-mtg-border rounded-xl p-6 space-y-5">
       <h2 className="font-display text-lg text-mtg-gold">Log a Match</h2>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-mtg-muted uppercase tracking-wider">Mitt dekk</label>
+        {decks.length > 0 ? (
+          <select
+            value={form.my_deck}
+            onChange={e => setForm(f => ({ ...f, my_deck: e.target.value }))}
+            className="w-full bg-mtg-bg border border-mtg-border rounded-lg px-3 py-2 text-mtg-text text-sm focus:outline-none focus:border-mtg-gold/60"
+          >
+            <option value="">— Velg dekk —</option>
+            {decks.map(d => <option key={d.id} value={d.name}>{d.name} ({d.format})</option>)}
+          </select>
+        ) : (
+          <p className="text-xs text-mtg-muted py-1">
+            Ingen dekker registrert. Legg til i <span className="text-mtg-gold">Dekker</span>-fanen.
+          </p>
+        )}
+      </div>
 
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-mtg-muted uppercase tracking-wider">
