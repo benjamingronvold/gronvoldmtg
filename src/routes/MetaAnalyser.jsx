@@ -80,37 +80,44 @@ export default function MetaAnalyser() {
   }
 
   // Legg til én spiller via skjema, lagre også i spillerdatabase
+  async function syncToPlayerDb(playerData) {
+    const { data: existing } = await supabase
+      .from('players')
+      .select('id')
+      .eq('display_name', playerData.display_name)
+      .maybeSingle()
+    if (existing) {
+      const { data } = await supabase.from('players').update(playerData).eq('id', existing.id).select().single()
+      if (data) setDbPlayers(prev => prev.map(p => p.id === data.id ? data : p))
+    } else {
+      const { data } = await supabase.from('players').insert(playerData).select().single()
+      if (data) setDbPlayers(prev => [...prev, data].sort((a, b) => a.display_name.localeCompare(b.display_name)))
+    }
+  }
+
   async function handleAddPlayer(e) {
     e.preventDefault()
     if (!addForm.display_name.trim()) return
     setAddingPlayer(true)
 
-    const [tpResult, dbResult] = await Promise.all([
-      supabase
-        .from('tournament_players')
-        .insert({ ...addForm, tournament_id: activeTournament.id })
-        .select()
-        .single(),
-      supabase
-        .from('players')
-        .upsert(
-          { ...addForm },
-          { onConflict: 'display_name', ignoreDuplicates: false }
-        )
-        .select()
-        .single(),
-    ])
+    const { data, error } = await supabase
+      .from('tournament_players')
+      .insert({ ...addForm, tournament_id: activeTournament.id })
+      .select()
+      .single()
+
+    if (error) { setAddingPlayer(false); alert(error.message); return }
+    setPlayers(prev => [...prev, data])
+
+    await syncToPlayerDb({
+      display_name: addForm.display_name,
+      moxfield_username: addForm.moxfield_username || null,
+      mtgo_username: addForm.mtgo_username || null,
+      archetype: addForm.archetype || null,
+      decklist_url: addForm.decklist_url || null,
+    })
 
     setAddingPlayer(false)
-    if (tpResult.error) { alert(tpResult.error.message); return }
-
-    setPlayers(prev => [...prev, tpResult.data])
-    if (dbResult.data) {
-      setDbPlayers(prev => {
-        const exists = prev.find(p => p.id === dbResult.data.id)
-        return exists ? prev.map(p => p.id === dbResult.data.id ? dbResult.data : p) : [...prev, dbResult.data]
-      })
-    }
     setAddForm(EMPTY_FORM)
   }
 
@@ -154,6 +161,18 @@ export default function MetaAnalyser() {
     const { error } = await supabase.from('tournament_players').update(changes).eq('id', id)
     if (error) { alert(error.message); return }
     setPlayers(prev => prev.map(p => p.id === id ? { ...p, ...changes } : p))
+    // Sync relevant fields back to player database
+    const player = players.find(p => p.id === id)
+    if (player) {
+      const syncFields = {}
+      if ('archetype' in changes) syncFields.archetype = changes.archetype || null
+      if ('moxfield_username' in changes) syncFields.moxfield_username = changes.moxfield_username || null
+      if ('mtgo_username' in changes) syncFields.mtgo_username = changes.mtgo_username || null
+      if ('decklist_url' in changes) syncFields.decklist_url = changes.decklist_url || null
+      if (Object.keys(syncFields).length > 0) {
+        syncToPlayerDb({ display_name: player.display_name, ...syncFields })
+      }
+    }
   }
 
   // Dropdown-filtrering

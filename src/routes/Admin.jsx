@@ -49,42 +49,47 @@ export default function Admin() {
     setLoadingPlayers(false)
   }
 
+  // Merge: players table + any tournament_players not yet in players table
+  const mergedPlayers = useMemo(() => {
+    const knownNames = new Set(players.map(p => p.display_name.toLowerCase()))
+    const orphans = [...new Set(tournamentPlayers.map(tp => tp.display_name).filter(Boolean))]
+      .filter(name => !knownNames.has(name.toLowerCase()))
+      .map(name => ({ id: `tp-${name}`, display_name: name, _orphan: true }))
+    return [...players, ...orphans].sort((a, b) => a.display_name.localeCompare(b.display_name))
+  }, [players, tournamentPlayers])
+
   // Compute most played deck + last tournament per player
   const playerStats = useMemo(() => {
     const tournamentById = Object.fromEntries((tournaments ?? []).map(t => [t.id, t]))
     return Object.fromEntries(
-      (players ?? []).map(player => {
+      mergedPlayers.map(player => {
         const entries = tournamentPlayers.filter(
           tp => tp.display_name?.toLowerCase() === player.display_name?.toLowerCase()
         )
-        // most played archetype
         const archetypeCounts = {}
         for (const e of entries) {
           if (e.archetype) archetypeCounts[e.archetype] = (archetypeCounts[e.archetype] ?? 0) + 1
         }
         const mostPlayed = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
-
-        // last tournament by date
         const participated = entries
           .map(e => tournamentById[e.tournament_id])
           .filter(Boolean)
           .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
         const lastTournament = participated[0] ?? null
-
         return [player.id, { mostPlayed, lastTournament, count: entries.length }]
       })
     )
-  }, [players, tournamentPlayers, tournaments])
+  }, [mergedPlayers, tournamentPlayers, tournaments])
 
   const filteredPlayers = useMemo(() => {
     const q = playerSearch.toLowerCase()
-    if (!q) return players
-    return players.filter(p =>
+    if (!q) return mergedPlayers
+    return mergedPlayers.filter(p =>
       p.display_name.toLowerCase().includes(q) ||
       (p.archetype ?? '').toLowerCase().includes(q) ||
       (p.moxfield_username ?? '').toLowerCase().includes(q)
     )
-  }, [players, playerSearch])
+  }, [mergedPlayers, playerSearch])
 
   async function handleAddPlayer(e) {
     e.preventDefault()
@@ -114,6 +119,16 @@ export default function Admin() {
     if (error) { alert(error.message); return }
     setPlayers(prev => prev.map(p => p.id === editingPlayer.id ? { ...p, ...editingPlayer } : p))
     setEditingPlayer(null)
+  }
+
+  async function handleSaveOrphan(name) {
+    const { data, error } = await supabase
+      .from('players')
+      .insert({ display_name: name })
+      .select()
+      .single()
+    if (error) { alert(error.message); return }
+    setPlayers(prev => [...prev, data].sort((a, b) => a.display_name.localeCompare(b.display_name)))
   }
 
   async function handleDeletePlayer(id) {
@@ -289,6 +304,11 @@ export default function Admin() {
                 />
                 <span className="text-xs text-mtg-muted">{filteredPlayers.length} spillere</span>
               </div>
+              {mergedPlayers.some(p => p._orphan) && (
+                <p className="text-xs text-amber-400/80 bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-2">
+                  Noen turneringsdeltakere er ikke i spillerdatabasen ennå (markert med ★). Klikk «Lagre» for å legge dem til.
+                </p>
+              )}
 
               <div className="bg-mtg-card border border-mtg-border rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
@@ -343,8 +363,11 @@ export default function Admin() {
                       }
 
                       return (
-                        <tr key={player.id} className="border-b border-mtg-border/50 hover:bg-mtg-bg/30 group">
-                          <td className="px-4 py-3 text-mtg-text font-medium">{player.display_name}</td>
+                        <tr key={player.id} className={`border-b border-mtg-border/50 hover:bg-mtg-bg/30 group ${player._orphan ? 'opacity-70' : ''}`}>
+                          <td className="px-4 py-3 text-mtg-text font-medium">
+                            {player._orphan && <span className="text-amber-400 mr-1 text-xs">★</span>}
+                            {player.display_name}
+                          </td>
                           <td className="px-4 py-3 text-mtg-muted text-xs">
                             {player.moxfield_username && <div>Mox: {player.moxfield_username}</div>}
                             {player.mtgo_username && <div>MTGO: {player.mtgo_username}</div>}
@@ -362,22 +385,31 @@ export default function Admin() {
                           </td>
                           <td className="px-4 py-3 text-center text-mtg-muted text-sm">{stats.count ?? 0}</td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                              <button onClick={() => setEditingPlayer({ ...player })}
-                                className="text-xs text-mtg-muted hover:text-mtg-gold transition-colors px-1.5 py-0.5 border border-transparent hover:border-mtg-border rounded">✎</button>
-                              {confirmDeletePlayer === player.id ? (
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => handleDeletePlayer(player.id)} disabled={deletingPlayer === player.id}
-                                    className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/40 rounded hover:bg-red-500/30 disabled:opacity-50">
-                                    {deletingPlayer === player.id ? '…' : 'Slett'}
-                                  </button>
-                                  <button onClick={() => setConfirmDeletePlayer(null)} className="text-xs text-mtg-muted hover:text-mtg-text">✕</button>
-                                </div>
-                              ) : (
-                                <button onClick={() => setConfirmDeletePlayer(player.id)}
-                                  className="text-xs text-mtg-muted hover:text-red-400 transition-colors px-1.5 py-0.5 border border-transparent hover:border-mtg-border rounded">✕</button>
-                              )}
-                            </div>
+                            {player._orphan ? (
+                              <button
+                                onClick={() => handleSaveOrphan(player.display_name)}
+                                className="text-xs px-2 py-1 bg-amber-400/10 text-amber-400 border border-amber-400/30 rounded hover:bg-amber-400/20 transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                Lagre i database
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                <button onClick={() => setEditingPlayer({ ...player })}
+                                  className="text-xs text-mtg-muted hover:text-mtg-gold transition-colors px-1.5 py-0.5 border border-transparent hover:border-mtg-border rounded">✎</button>
+                                {confirmDeletePlayer === player.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <button onClick={() => handleDeletePlayer(player.id)} disabled={deletingPlayer === player.id}
+                                      className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/40 rounded hover:bg-red-500/30 disabled:opacity-50">
+                                      {deletingPlayer === player.id ? '…' : 'Slett'}
+                                    </button>
+                                    <button onClick={() => setConfirmDeletePlayer(null)} className="text-xs text-mtg-muted hover:text-mtg-text">✕</button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => setConfirmDeletePlayer(player.id)}
+                                    className="text-xs text-mtg-muted hover:text-red-400 transition-colors px-1.5 py-0.5 border border-transparent hover:border-mtg-border rounded">✕</button>
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )
