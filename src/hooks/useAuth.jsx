@@ -15,7 +15,8 @@ export function AuthProvider({ children }) {
       .select('*')
       .eq('id', userId)
       .single()
-    setProfile(data)
+    // Only overwrite profile if we got data — never clear a valid session on network blip
+    if (data) setProfile(data)
   }
 
   useEffect(() => {
@@ -28,14 +29,17 @@ export function AuthProvider({ children }) {
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        setLoading(true)
-        fetchProfile(session.user.id).finally(() => setLoading(false))
-      } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Only react to explicit sign-out — token refreshes etc. should not clear state
+      if (event === 'SIGNED_OUT') {
+        setUser(null)
         setProfile(null)
         setLoading(false)
+        return
+      }
+      if (session?.user) {
+        setUser(session.user)
+        fetchProfile(session.user.id)
       }
     })
 
