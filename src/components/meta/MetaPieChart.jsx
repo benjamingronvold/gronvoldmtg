@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import html2canvas from 'html2canvas'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const COLORS = [
@@ -42,28 +43,16 @@ export default function MetaPieChart({ players }) {
     )
   }
 
-  function downloadPNG() {
-    const svg = chartRef.current?.querySelector('svg')
-    if (!svg) return
-    const svgData = new XMLSerializer().serializeToString(svg)
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const img = new Image()
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
-    const url = URL.createObjectURL(svgBlob)
-    img.onload = () => {
-      canvas.width = img.width
-      canvas.height = img.height
-      ctx.fillStyle = '#0f0f1a'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(img, 0, 0)
-      URL.revokeObjectURL(url)
-      const a = document.createElement('a')
-      a.download = 'meta-chart.png'
-      a.href = canvas.toDataURL('image/png')
-      a.click()
-    }
-    img.src = url
+  async function downloadPNG() {
+    if (!chartRef.current) return
+    const canvas = await html2canvas(chartRef.current, {
+      backgroundColor: '#0f0f1a',
+      scale: 2,
+    })
+    const a = document.createElement('a')
+    a.download = 'meta-chart.png'
+    a.href = canvas.toDataURL('image/png')
+    a.click()
   }
 
   return (
