@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { useStorage } from '../../hooks/useStorage.js'
 
-export default function QuickCreate({ onSave, onCancel }) {
-  const { saveScenario } = useStorage()
+export default function QuickCreate({ onSave, onCancel, saveScenario }) {
   const [form, setForm] = useState({
     name: '',
     description: '',

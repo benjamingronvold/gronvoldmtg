@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { useStorage } from '../../hooks/useStorage.js'
 import { useScryfallAutocomplete } from '../../hooks/useScryfall.js'
 
 function CardEntry({ card, onChange, onRemove }) {
@@ -81,8 +80,7 @@ function StepEntry({ step, onChange, onRemove, onMoveUp, onMoveDown, index, tota
   )
 }
 
-export default function ScenarioEditor({ scenario, onSave, onCancel }) {
-  const { saveScenario } = useStorage()
+export default function ScenarioEditor({ scenario, onSave, onCancel, saveScenario }) {
   const [errors, setErrors] = useState([])
 
   const [form, setForm] = useState(() => scenario ? { ...scenario } : {

@@ -10,7 +10,7 @@ export default function FindTheLine() {
   const [view, setView] = useState('list')
   const [activeScenario, setActiveScenario] = useState(null)
   const [editingScenario, setEditingScenario] = useState(null)
-  const { scenarios } = useStorage()
+  const { scenarios, saveScenario, deleteScenario } = useStorage()
   const { isAdmin } = useAuth()
 
   function handlePlay(scenario) {
@@ -90,12 +90,14 @@ export default function FindTheLine() {
             scenario={editingScenario}
             onSave={handleBack}
             onCancel={handleBack}
+            saveScenario={saveScenario}
           />
         )}
         {view === 'quick-create' && isAdmin && (
           <QuickCreate
             onSave={handleBack}
             onCancel={handleBack}
+            saveScenario={saveScenario}
           />
         )}
       </main>
