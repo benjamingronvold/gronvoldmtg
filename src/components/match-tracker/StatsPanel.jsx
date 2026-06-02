@@ -1,36 +1,18 @@
 import { useState, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
 function pct(n, d) {
   if (!d) return 0
   return Math.round((n / d) * 100)
 }
 
 export default function StatsPanel({ matches }) {
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(String(currentYear))
-  const [month, setMonth] = useState('')
   const [sortBy, setSortBy] = useState('archetype')
   const [sortAsc, setSortAsc] = useState(true)
 
-  const availableYears = useMemo(() => {
-    const years = [...new Set(matches.map(m => m.played_at?.slice(0, 4)))].filter(Boolean).sort().reverse()
-    return years.length ? years : [String(currentYear)]
-  }, [matches, currentYear])
-
-  const filtered = useMemo(() => {
-    return matches.filter(m => {
-      if (year && !m.played_at?.startsWith(year)) return false
-      if (month && m.played_at?.slice(5, 7) !== String(month).padStart(2, '0')) return false
-      return true
-    })
-  }, [matches, year, month])
-
   const stats = useMemo(() => {
     const map = {}
-    for (const m of filtered) {
+    for (const m of matches) {
       const arch = m.opponent_archetype || 'Unknown'
       if (!map[arch]) map[arch] = { archetype: arch, matches: 0, matchWins: 0, matchDraws: 0, gameWins: 0, gameLosses: 0 }
       map[arch].matches++
@@ -44,7 +26,7 @@ export default function StatsPanel({ matches }) {
       mwPct: pct(s.matchWins, s.matches),
       gwPct: pct(s.gameWins, s.gameWins + s.gameLosses),
     }))
-  }, [filtered])
+  }, [matches])
 
   const sorted = useMemo(() => {
     return [...stats].sort((a, b) => {
@@ -55,12 +37,12 @@ export default function StatsPanel({ matches }) {
     })
   }, [stats, sortBy, sortAsc])
 
-  const totalMatches = filtered.length
-  const totalWins = filtered.filter(m => m.match_win).length
-  const totalDraws = filtered.filter(m => m.result === '1-1-0').length
+  const totalMatches = matches.length
+  const totalWins = matches.filter(m => m.match_win).length
+  const totalDraws = matches.filter(m => m.result === '1-1-0').length
   const totalLosses = totalMatches - totalWins - totalDraws
-  const totalGameWins = filtered.reduce((s, m) => s + (m.game_wins ?? 0), 0)
-  const totalGameLosses = filtered.reduce((s, m) => s + (m.game_losses ?? 0), 0)
+  const totalGameWins = matches.reduce((s, m) => s + (m.game_wins ?? 0), 0)
+  const totalGameLosses = matches.reduce((s, m) => s + (m.game_losses ?? 0), 0)
 
   function toggleSort(col) {
     if (sortBy === col) setSortAsc(a => !a)
@@ -78,26 +60,6 @@ export default function StatsPanel({ matches }) {
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <select
-          value={year}
-          onChange={e => setYear(e.target.value)}
-          className="bg-mtg-card border border-mtg-border rounded-lg px-3 py-1.5 text-sm text-mtg-text focus:outline-none focus:border-mtg-gold/60"
-        >
-          <option value="">All Years</option>
-          {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select
-          value={month}
-          onChange={e => setMonth(e.target.value)}
-          className="bg-mtg-card border border-mtg-border rounded-lg px-3 py-1.5 text-sm text-mtg-text focus:outline-none focus:border-mtg-gold/60"
-        >
-          <option value="">All Months</option>
-          {MONTHS.map((m, i) => <option key={i} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
-        </select>
-      </div>
-
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
